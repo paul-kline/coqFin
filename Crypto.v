@@ -222,37 +222,70 @@ Eval compute in check_dec nat (sign nat (basic nat 1) (private 1)) (public 2).
 
 Require Import List.
 Definition Name := nat.
-SearchAbout In.
+
 Definition KeyServer  := list (Name * keyType) % type.
 
 
-SearchAbout exist . 
+SearchAbout exist .
+Lemma noteqpOne : forall x : nat, S x <> x.
+Proof.  intros. induction x. congruence. unfold not.  intros. inversion H. contradiction.  Qed.
 
-Fixpoint addKey (ks : KeyServer) (name : Name) (k : keyType | exists kv : key_val, k = public kv) :{ks' : KeyServer | In (name, (proj1_sig k)) ks' }.
-Proof. 
-   exists ( (name, (proj1_sig k))::ks). simpl. left.  reflexivity. Defined.
 
-Fixpoint removeKey (ks : KeyServer) (name : Name) :
-   {ks' : KeyServer | forall k : keyType, ~ In (name, k) ks' } + { forall k : keyType, ~ In (name, k) ks} .
+Fixpoint nameinServer (n : Name) (ks : KeyServer): bool :=
+  match ks with 
+   | nil => false
+   | x :: xs => match x with 
+                 (na,kk) => if beq_nat na n then true else nameinServer n xs
+                end
+  end. 
+Inductive keyServerError (ks : KeyServer) (k : keyType) (n : Name): Prop :=
+ | notAPublicKey : {k  | forall x, k <> public x} -> keyServerError ks k n
+ | alreadyEntryForName : ((nameinServer n ks) = true) -> keyServerError ks k n. 
+
+SearchAbout In.
+    
+ 
+Definition addKey (ks : KeyServer)(name : Name) (k : keyType) : KeyServer + {keyServerError ks k name}.
+Proof. destruct k. right. constructor. exists (symmetric k).  intros. unfold not.  intros. inversion H.    
+right. constructor.  exists (private k). intros. unfold not. intros. inversion H. 
+left. exact ( (name, (public k))::ks). Defined.  
+(*
+ refine 
+  match k with
+    | symmetric kv => inright (notAPublicKey ks k name (_ : {k : keyType | forall x, k <> public x} )) 
+    | private kv => inright (notAPublicKey ks k name _)
+    | public kv => if nameinServer name ks then inright (alreadyEntryForName ks k name (_))
+                                           else inleft ( (name,k):: ks)
+  end. induction k. 
+exists (symmetric k). intros. unfold not.  intros.  inversion H.
+exists (private k). intros. unfold not.  intros.  inversion H.
+exists (symmetric k). intros. unfold not.  intros.  inversion H.
+exists (symmetric kv). intros. unfold not.  intros.  inversion H.
+induction nameinServer.
+reflexivity.  
+destruct ks. 
+simpl.        
+
+assumption. 
+*)
+
+Definition ks0 : KeyServer := nil .
+Definition ks1 := addKey ks0 1 (public 1). 
+Check ks1. 
+
+Fixpoint removeKey (ks : KeyServer) (name : Name) : KeyServer + {forall k : keyType, ~In (name,k) ks}.
+destruct ks.  right. simpl. intros. unfold not. intros. apply H. 
+ 
 refine 
   match ks with 
-   | nil =>  _ 
-   | (n,mk) :: ks' => if eq_nat n name then removeKey name ks'
-                                       else (n,mk) :: (removeKey name ks').
+   | nil => _
+   | x :: xs => if (beq_nat (fst x) name) then inleft xs else _
+  end. right. intros. 
+Definition addAgain := 
+  match ks1 with 
+   | inleft ks1' => _ (* addKey (ks1') 1 (public 1)*)
+   | inright _ => inright (alreadyEntryForName _)
+  end.  
 
 
-exists ( (name, (proj1_sig k))::ks). simpl. left.  reflexivity. Defined. 
- 
 
- 
-  
-
-Inductive Entity : Type :=
-  entity : Name -> keyType -> Entity.
-
-Definition Key (k : keyType) : Type.
-
-Definition send {T : Type} (from : Entity) (to:Name) ( m: message T | exists m2 : message T, exists k : keyType, m = (sign T m2 k) ) : Prop.   
-  refine 
-    match from with 
-      | entity ename ekey
