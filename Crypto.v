@@ -223,7 +223,7 @@ Eval compute in check_dec nat (sign nat (basic nat 1) (private 1)) (public 2).
 Require Import List.
 Definition Name := nat.
 
-Definition KeyServer  := list (Name * keyType) % type.
+Definition KeyServer  := list (Name * {k : keyType | exists x, k = public x}) % type.
 
 
 SearchAbout exist .
@@ -238,54 +238,56 @@ Fixpoint nameinServer (n : Name) (ks : KeyServer): bool :=
                  (na,kk) => if beq_nat na n then true else nameinServer n xs
                 end
   end. 
-Inductive keyServerError (ks : KeyServer) (k : keyType) (n : Name): Prop :=
- | notAPublicKey : {k  | forall x, k <> public x} -> keyServerError ks k n
- | alreadyEntryForName : ((nameinServer n ks) = true) -> keyServerError ks k n. 
+Inductive keyServerError (ks : KeyServer): Prop :=
+ | notAPublicKey : {k  | forall x, k <> public x} -> keyServerError ks
+ | alreadyEntryForName : { n : Name | (nameinServer n ks) = true} -> keyServerError ks. 
 
 SearchAbout In.
     
- 
-Definition addKey (ks : KeyServer)(name : Name) (k : keyType) : KeyServer + {keyServerError ks k name}.
-Proof. destruct k. right. constructor. exists (symmetric k).  intros. unfold not.  intros. inversion H.    
-right. constructor.  exists (private k). intros. unfold not. intros. inversion H. 
-left. exact ( (name, (public k))::ks). Defined.  
-(*
- refine 
-  match k with
-    | symmetric kv => inright (notAPublicKey ks k name (_ : {k : keyType | forall x, k <> public x} )) 
-    | private kv => inright (notAPublicKey ks k name _)
-    | public kv => if nameinServer name ks then inright (alreadyEntryForName ks k name (_))
-                                           else inleft ( (name,k):: ks)
-  end. induction k. 
-exists (symmetric k). intros. unfold not.  intros.  inversion H.
-exists (private k). intros. unfold not.  intros.  inversion H.
-exists (symmetric k). intros. unfold not.  intros.  inversion H.
-exists (symmetric kv). intros. unfold not.  intros.  inversion H.
-induction nameinServer.
-reflexivity.  
-destruct ks. 
-simpl.        
+Definition addKey (ks : KeyServer) (name : Name) (k : keyType) : KeyServer + {keyServerError ks}.
+Proof. destruct k. case (symmetric k). intros. right. constructor. exists (symmetric k) . intros. unfold not. intros. inversion H.
+right. constructor. exists (private k). intros. unfold not. intros. inversion H.
+left. assert ((public k) = (public k)). reflexivity.  refine ((name, _) ::ks).
+eauto. Defined. 
 
-assumption. 
-*)
+Definition ks0 : KeyServer := nil.
+Eval compute in addKey ks0 1 (public 1).
+Eval compute in addKey ks0 1 (private 1).
+Eval compute in addKey ks0 1 (symmetric 1).
 
-Definition ks0 : KeyServer := nil .
-Definition ks1 := addKey ks0 1 (public 1). 
-Check ks1. 
-
-Fixpoint removeKey (ks : KeyServer) (name : Name) : KeyServer + {forall k : keyType, ~In (name,k) ks}.
-destruct ks.  right. simpl. intros. unfold not. intros. apply H. 
- 
-refine 
+Fixpoint realRemove (ks : KeyServer) (name :Name) : KeyServer :=
   match ks with 
-   | nil => _
-   | x :: xs => if (beq_nat (fst x) name) then inleft xs else _
-  end. right. intros. 
-Definition addAgain := 
-  match ks1 with 
-   | inleft ks1' => _ (* addKey (ks1') 1 (public 1)*)
-   | inright _ => inright (alreadyEntryForName _)
+    | nil => nil
+    | x :: xs => if beq_nat (fst x) name then realRemove xs name else x :: (realRemove xs name)
+  end.
+
+Fixpoint  removeKey (ks : KeyServer) (name : Name) : KeyServer + {nameinServer name ks = false}.
+  case_eq (nameinServer name ks). intros. left. exact (realRemove ks name).
+  intros. right. reflexivity. Defined.
+
+
+Definition pub2 := public 2. 
+Definition pub3 := public 3. 
+Example kstest : KeyServer := ( exist (fun (p : exists x, pub2 = public x) => exists x : key_val, pub2 = public x) ) :: nil.
+Print pub2.  
+Definition ks3 := (2,public 2) :: ((3,public 3) :: ks0).
+Eval compute in removeKey ks3 1.
+Eval compute in removeKey ks3 2.
+Eval compute in removeKey ks3 3.
+Eval compute in removeKey ks3 4.
+
+Definition publicServerKey := public 0.
+
+Inductive Maybe (T : Type) :=
+ | Just : T -> Maybe T
+ | Nothing : Maybe T.
+Fixpoint findMaybe (name : Name) (ks : KeyServer) : Maybe keyType :=
+  match ks with 
+   | nil => Nothing keyType
+   | x :: xs => if beq_nat (fst x) name then Just keyType (snd x) else findMaybe name xs
   end.  
 
+Fixpoint requestKey (name :Name) (ks : KeyServer) : Maybe keyType := findMaybe name ks.  
 
 
+Definition send (priv : keyType) (theyPub : keyType)
