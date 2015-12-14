@@ -265,12 +265,13 @@ Fixpoint  removeKey (ks : KeyServer) (name : Name) : KeyServer + {nameinServer n
   case_eq (nameinServer name ks). intros. left. exact (realRemove ks name).
   intros. right. reflexivity. Defined.
 
+Definition PubProof :={k : keyType | exists x, k = public x}.
 
-Definition pub2 := public 2. 
-Definition pub3 := public 3. 
-Example kstest : KeyServer := ( exist (fun (p : exists x, pub2 = public x) => exists x : key_val, pub2 = public x) ) :: nil.
-Print pub2.  
-Definition ks3 := (2,public 2) :: ((3,public 3) :: ks0).
+
+Definition pub2 : {k : keyType | exists x, k = public x}. exists (public 2). exists 2. reflexivity. Defined.   
+Definition pub3 : PubProof. exists (public 3). exists 3. reflexivity. Defined.  
+
+Definition ks3 := (2,pub2) :: ((3,pub3) :: ks0).
 Eval compute in removeKey ks3 1.
 Eval compute in removeKey ks3 2.
 Eval compute in removeKey ks3 3.
@@ -278,16 +279,55 @@ Eval compute in removeKey ks3 4.
 
 Definition publicServerKey := public 0.
 
-Inductive Maybe (T : Type) :=
- | Just : T -> Maybe T
- | Nothing : Maybe T.
-Fixpoint findMaybe (name : Name) (ks : KeyServer) : Maybe keyType :=
-  match ks with 
-   | nil => Nothing keyType
-   | x :: xs => if beq_nat (fst x) name then Just keyType (snd x) else findMaybe name xs
-  end.  
+Inductive Maybe {T : Type} :=
+ | Just : T -> Maybe
+ | Nothing : Maybe.
 
-Fixpoint requestKey (name :Name) (ks : KeyServer) : Maybe keyType := findMaybe name ks.  
+Fixpoint findMaybe (name : Name) (ks : KeyServer) : Maybe :=
+  match ks with 
+   | nil => Nothing
+   | x :: xs => if beq_nat (fst x) name then Just (snd x) else findMaybe name xs
+  end.
+
+Theorem nameinServerNotEmpty : forall name : Name, forall ks : KeyServer,
+  nameinServer name ks = true -> ks <> nil. 
+Proof. intros. unfold not. intros. unfold nameinServer in H. rewrite H0 in H. inversion H. Defined.
+(*Theorem babyStep0 : forall name : Name, forall ks : KeyServer, forall x, 
+    nameinServer name ks = nameinServer name (x :: ks) -> nameinServer name ks = true. 
+Proof. intros. rewrite H.  unfold nameinServer. intros.   let. .  .  inversion H.  destruct beq_nat in H1. exact (fst x). exact (fst x).   rewrite H. simpl. intros. rewrite H.  auto .  case_eq (beq_nat na name).  simpl in H. 
+*)
+Theorem babyStep : forall name : Name, forall ks : KeyServer, forall x,
+  nameinServer name (x :: ks)= true -> name = (fst x) \/ nameinServer name ks = true.
+Proof. intros. induction (x :: ks). simpl in H.   left. simpl. destruct x. assert (beq_nat n name = true). 
+case_eq (beq_nat n name).  trivial. intros.  apply H.   simpl. inversion H. unfold fst.  
+auto.  
+
+
+ simpl in H0. (* unfold beq_nat in H0. trivial.*)
+SearchAbout beq_nat. apply beq_nat_true in H0.  rewrite H0.  reflexivity. 
+
+ 
+
+Theorem find : forall name : Name, forall ks : KeyServer,
+               nameinServer name ks = true -> exists x, findMaybe name ks = Just x.
+Proof. intros. induction ks. apply nameinServerNotEmpty in H. elim H. reflexivity. 
+simpl in H. 
+assert ((fst a) = name \/ nameinServer name ks = true).
+
+inversion H. apply H in IHks.  
+
+
+  unfold nameinServer in H. inversion H. apply nameinServerNotEmpty in H. unfold not in H. induction ks. elim H1. inversion H1. 
+apply nameinServerNotEmpty in H1.  .  H1.   unfold nameinServer in H. destruct ks. inversion H. fold nameinServer in H. inversion H. 
+exists (snd p). unfold findMaybe.   
+  constructor .
+inversion H. simpl in H.   simpl in H.    
+
+
+Fixpoint requestKey (name :Name) (ks : KeyServer) : keyType + { nameinServer name ks = false}.
+Proof. case_eq (nameinServer name ks). intros.   induction (requestKey name ks).  (findMaybe name ks). intros. left.  exact (proj1_sig t). right. simpl.  
+
+Fixpoint requestKey (name :Name) (ks : KeyServer) : Maybe := findMaybe name ks.  
 
 
 Definition send (priv : keyType) (theyPub : keyType)
