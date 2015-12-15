@@ -298,9 +298,10 @@ Proof. intros. rewrite H.  unfold nameinServer. intros.   let. .  .  inversion H
 *)
 Theorem babyStep : forall name : Name, forall ks : KeyServer, forall x,
   nameinServer name (x :: ks)= true -> name = (fst x) \/ nameinServer name ks = true.
-Proof. intros. induction (x :: ks). simpl in H.   left. simpl. destruct x. assert (beq_nat n name = true). 
+Proof. intros. induction (fst x). induction name as [|name']. left. reflexivity.    induction (x :: ks).  Abort. 
+(*simpl in H.   left. simpl. destruct x. assert (beq_nat n name = true). 
 case_eq (beq_nat n name).  trivial. intros.  apply H.   simpl. inversion H. unfold fst.  
-auto.  
+auto.  cbv. 
 
 
  simpl in H0. (* unfold beq_nat in H0. trivial.*)
@@ -323,11 +324,27 @@ exists (snd p). unfold findMaybe.
   constructor .
 inversion H. simpl in H.   simpl in H.    
 
+*)
+Fixpoint requestKey (name :Name) (ks : KeyServer) : keyType + { findMaybe name ks = Nothing}. 
+Proof. case_eq (findMaybe name ks). intros. left.  exact (proj1_sig s). right. reflexivity. 
 
-Fixpoint requestKey (name :Name) (ks : KeyServer) : keyType + { nameinServer name ks = false}.
+(*
+
+ name ks = false}.
 Proof. case_eq (nameinServer name ks). intros.   induction (requestKey name ks).  (findMaybe name ks). intros. left.  exact (proj1_sig t). right. simpl.  
 
 Fixpoint requestKey (name :Name) (ks : KeyServer) : Maybe := findMaybe name ks.  
 
+*)
 
-Definition send (priv : keyType) (theyPub : keyType)
+Inductive MessagePair (T : Type) := 
+  messagepair : Name -> message T -> MessagePair T.
+ 
+Definition send {T : Type} (pk : keyType) (encryp : keyType) (m : message T) (toGuy : Name) : {mp : MessagePair T | mp = messagepair T toGuy (sign T (encrypt T m encryp) pk)}.
+Proof.  exists ( messagepair T toGuy (sign T (encrypt T m encryp) pk)). reflexivity. Defined. 
+
+
+ (sign T (encrypt T m encryp) pk)).
+
+
+     
