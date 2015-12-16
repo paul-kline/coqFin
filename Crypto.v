@@ -326,7 +326,7 @@ inversion H. simpl in H.   simpl in H.
 
 *)
 Fixpoint requestKey (name :Name) (ks : KeyServer) : keyType + { findMaybe name ks = Nothing}. 
-Proof. case_eq (findMaybe name ks). intros. left.  exact (proj1_sig s). right. reflexivity. 
+Proof. case_eq (findMaybe name ks). intros. left.  exact (proj1_sig s). right. reflexivity. Defined.  
 
 (*
 
@@ -337,14 +337,86 @@ Fixpoint requestKey (name :Name) (ks : KeyServer) : Maybe := findMaybe name ks.
 
 *)
 
-Inductive MessagePair (T : Type) := 
-  messagepair : Name -> message T -> MessagePair T.
+Inductive RealMessage (T : Type) := 
+  realmessage : Name -> Name -> message T -> RealMessage T.
  
-Definition send {T : Type} (pk : keyType) (encryp : keyType) (m : message T) (toGuy : Name) : {mp : MessagePair T | mp = messagepair T toGuy (sign T (encrypt T m encryp) pk)}.
-Proof.  exists ( messagepair T toGuy (sign T (encrypt T m encryp) pk)). reflexivity. Defined. 
+Definition send {T : Type} (pk : keyType) (encryp : keyType) (m : message T) (fromGuy : Name) (toGuy : Name) : {mp : RealMessage T | mp = realmessage T fromGuy toGuy (sign T (encrypt T m encryp) pk)}.
+Proof.  exists ( realmessage T fromGuy toGuy (sign T (encrypt T m encryp) pk)). reflexivity. Defined. 
+Definition getFrom {T : Type} (mp : RealMessage T): Name :=
+  match mp with
+   | realmessage f t m => f
+  end. 
+Definition getTo {T : Type} (mp : RealMessage T): Name :=
+  match mp with
+   | realmessage f t m => t
+  end.
+
+Definition getMessage {T : Type} (mp : RealMessage T): message T :=
+  match mp with
+   | realmessage f t m => m
+  end. 
 
 
- (sign T (encrypt T m encryp) pk)).
+Inductive badbadnotgood {T : Type} ( mp : RealMessage T) (ks : KeyServer) (key : keyType) : Prop :=
+  | notsignedman : (exists k, requestKey (getFrom mp) ks = inleft k /\ ~ (is_signed (getMessage mp) k)) -> badbadnotgood mp ks key
+  | cantdecryptman : { m : message T | exists innerM : message T, forall k, forall mm, innerM <> encrypt T mm k /\ exists someK,                                  
+                       m = sign T innerM someK} -> badbadnotgood mp ks key
+  | myKeyFails : badbadnotgood mp ks key
+  | keyLookupFail : badbadnotgood mp ks key.
+
+
+Definition receiveMessage {T : Type} (ks : KeyServer) (mp : RealMessage T) (mypriv : keyType) : message T + { badbadnotgood mp ks mypriv }.
+Proof. case_eq (requestKey (getFrom mp) ks).  (*at this point, successful look up of pub key *)
+  intros.    
+    case_eq (getMessage mp).
+       intros. right.  constructor. exists k. split.  apply H.  rewrite H0. simpl. unfold not. intros.  apply H1. 
+       intros. right. constructor. exists k. split. apply H.  rewrite H0. simpl. unfold not. intros. apply H1. 
+       intros. right. constructor. exists k. split. apply H.  rewrite H0. simpl. unfold not. intros. apply H1.
+       intros. rename m into hopefullyEncrypted. 
+         (* this is the signed case *)
+         case_eq (hopefullyEncrypted). (* for all except encrypt form, return the error. *)
+           intros.  right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity. 
+           intros.   right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity.
+           (*encrypt case *) intros. case_eq (decrypt m mypriv). 
+                                        intros.  left. exact m0. 
+                                        intros. right. apply myKeyFails. (* this needs more descriptive args, but I'm really tired of this. *) 
+           intros.    right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity. 
+           intros.    right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity.
+           intros.    right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity.
+       intros. right. constructor. exists k. split. apply H.  rewrite H0. simpl. unfold not. intros. apply H1.
+       intros. right. constructor. exists k. split. apply H.  rewrite H0. simpl. unfold not. intros. apply H1.
+   intros. right.  apply keyLookupFail. (* needs more args again.*) Defined. 
+
+Definition engage {T: Type} (a : Name) (aPriv : keyType) (b: Name) ( bPriv : keyType) (ks : KeyServer) (m : message T) := 
+   match requestKey b ks with 
+     | inright _ => false
+     | inleft bPub => match receiveMessage ks (proj1_sig  (send bPub aPriv m a b) ) bPriv with
+                          | inright _ => false
+                          | inleft _ => true
+                      end
+   end. 
+
+(*
+Theorem Any message leaving a sending node is encrypted and signedsendTheorem     -- this is proven in the return type of send. 
+)*)
+
+Theorem receiveTheorem : forall T : Type,
+                         forall ks : KeyServer,
+                         forall mp : RealMessage T,                         
+                         forall k1 : keyType,
+                         exists m1 : message T, receiveMessage ks mp k1 = inleft m1 -> exists m : message T,
+                                                                exists k1 : keyType, exists k2 : keyType,    m1 = sign T (encrypt T m k1) k2 .
+Proof.  intros. case_eq (getMessage mp). 
+intros. exists (getMessage mp). rewrite H.  simpl. intros. compute in H0.    fold requestKey.  simpl. 
+ case_eq (receiveMessage ks mp k1). 
+   intros. exists m.  intros. case_eq m. 
+intros.  unfold receiveMessage in H. fold H. 
+                         
+                         forall mp : RealMessage T,
+                         forall mypriv : 
+
+
+
 
 
      
