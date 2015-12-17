@@ -282,21 +282,52 @@ Definition publicServerKey := public 0.
 Inductive Maybe {T : Type} :=
  | Just : T -> Maybe
  | Nothing : Maybe.
+(*
+Theorem inImpliesIn : forall T : Type, 
+                      forall t : T,
+                      forall t2 : T,
+                      forall ls : list T,
+                      In t ls 
+*)
+SearchAbout In.
+Fixpoint findOr (name : Name) (ks : KeyServer) : PubProof + {forall kp : PubProof, ~In (name,kp) ks}. 
+Proof. induction ks. right.  intros.  simpl. unfold not.  intros.  apply H. 
+destruct a.  case_eq (beq_nat name n).  intros. left.  exact s. 
+intros. SearchAbout In. destruct IHks. left. exact p. right. 
+intros. assert (~ (n,s) = (name, kp)). unfold not. intros. inversion H0. SearchAbout beq_nat. apply beq_nat_false in H.   symmetry in H2. contradiction. SearchAbout In. unfold not. intros.     symmetry in H. SearchAbout beq_nat. apply    rewrite H2 in H. SearchAbout beq_nat. apply beq_nat_refl in H.   simpl in H. 
+ left   destruct findOr. 
+.  case_eq (name = (fst a)).   trivial.  
+Fixpoint findMaybe (name : Name) (ks : KeyServer) : Maybe (T := PubProof).
+Proof.  intros. remember k as p.   trivial. remember k. ( k : PubProof).
 
-Fixpoint findMaybe (name : Name) (ks : KeyServer) : Maybe :=
+
+
+ :=
   match ks with 
    | nil => Nothing
    | x :: xs => if beq_nat (fst x) name then Just (snd x) else findMaybe name xs
   end.
 
+Theorem findMaybeNotEmpty : forall name : Name, forall ks : KeyServer,
+ forall s,  findMaybe name ks = Just s -> ks <> nil. 
+Proof. intros. induction ks. intros.  simpl in H. inversion H. unfold not. intros.  inversion H0. Qed.
 Theorem nameinServerNotEmpty : forall name : Name, forall ks : KeyServer,
   nameinServer name ks = true -> ks <> nil. 
 Proof. intros. unfold not. intros. unfold nameinServer in H. rewrite H0 in H. inversion H. Defined.
 
+Theorem notInImpliesNothings : forall (name : Name), forall ks : KeyServer, forall kp, ~(In (name,kp) ks) -> findMaybe name ks = Nothing.
+Proof. intros.  unfold not in H. simpl.  
+
+Theorem  findImpliesIn : forall (name : Name), forall (ks : KeyServer), forall (s : PubProof),
+(findMaybe name ks = Just s) ->   In (name, s) ks.
+Proof.  intros. exists s.  case_eq (findMaybe name ks). intros.  induction findMaybe. 
 
 
-Fixpoint requestKey (name :Name) (ks : KeyServer) : keyType + { findMaybe name ks = Nothing}. 
-Proof. case_eq (findMaybe name ks). intros. left.  exact (proj1_sig s). right. reflexivity. Defined.  
+
+Fixpoint requestKey {T : Type} (name :Name) (ks : KeyServer) : { m : message T | 
+                                                                 exists kp, m = sign T (key T (proj1_sig kp)) publicServerKey /\
+                                                                 In (name,kp) ks } + { findMaybe name ks = Nothing}. 
+Proof. case_eq (findMaybe name ks). intros. left.  exists (sign T (key T (proj1_sig s)) publicServerKey). exists s. split. reflexivity.   right. reflexivity. Defined.  
 
 (*
 
