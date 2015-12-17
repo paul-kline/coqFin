@@ -292,39 +292,9 @@ Fixpoint findMaybe (name : Name) (ks : KeyServer) : Maybe :=
 Theorem nameinServerNotEmpty : forall name : Name, forall ks : KeyServer,
   nameinServer name ks = true -> ks <> nil. 
 Proof. intros. unfold not. intros. unfold nameinServer in H. rewrite H0 in H. inversion H. Defined.
-(*Theorem babyStep0 : forall name : Name, forall ks : KeyServer, forall x, 
-    nameinServer name ks = nameinServer name (x :: ks) -> nameinServer name ks = true. 
-Proof. intros. rewrite H.  unfold nameinServer. intros.   let. .  .  inversion H.  destruct beq_nat in H1. exact (fst x). exact (fst x).   rewrite H. simpl. intros. rewrite H.  auto .  case_eq (beq_nat na name).  simpl in H. 
-*)
-Theorem babyStep : forall name : Name, forall ks : KeyServer, forall x,
-  nameinServer name (x :: ks)= true -> name = (fst x) \/ nameinServer name ks = true.
-Proof. intros. induction (fst x). induction name as [|name']. left. reflexivity.    induction (x :: ks).  Abort. 
-(*simpl in H.   left. simpl. destruct x. assert (beq_nat n name = true). 
-case_eq (beq_nat n name).  trivial. intros.  apply H.   simpl. inversion H. unfold fst.  
-auto.  cbv. 
 
 
- simpl in H0. (* unfold beq_nat in H0. trivial.*)
-SearchAbout beq_nat. apply beq_nat_true in H0.  rewrite H0.  reflexivity. 
 
- 
-
-Theorem find : forall name : Name, forall ks : KeyServer,
-               nameinServer name ks = true -> exists x, findMaybe name ks = Just x.
-Proof. intros. induction ks. apply nameinServerNotEmpty in H. elim H. reflexivity. 
-simpl in H. 
-assert ((fst a) = name \/ nameinServer name ks = true).
-
-inversion H. apply H in IHks.  
-
-
-  unfold nameinServer in H. inversion H. apply nameinServerNotEmpty in H. unfold not in H. induction ks. elim H1. inversion H1. 
-apply nameinServerNotEmpty in H1.  .  H1.   unfold nameinServer in H. destruct ks. inversion H. fold nameinServer in H. inversion H. 
-exists (snd p). unfold findMaybe.   
-  constructor .
-inversion H. simpl in H.   simpl in H.    
-
-*)
 Fixpoint requestKey (name :Name) (ks : KeyServer) : keyType + { findMaybe name ks = Nothing}. 
 Proof. case_eq (findMaybe name ks). intros. left.  exact (proj1_sig s). right. reflexivity. Defined.  
 
@@ -365,7 +335,12 @@ Inductive badbadnotgood {T : Type} ( mp : RealMessage T) (ks : KeyServer) (key :
   | keyLookupFail : badbadnotgood mp ks key.
 
 
-Definition receiveMessage {T : Type} (ks : KeyServer) (mp : RealMessage T) (mypriv : keyType) : message T + { badbadnotgood mp ks mypriv }.
+Definition receiveMessage {T : Type} (ks : KeyServer) (mp : RealMessage T) (mypriv : keyType) : 
+   {res : message T |  (exists k2 k1, (getMessage mp) = sign T (encrypt T res k2) k1 /\
+                       decrypt (encrypt T res k2) mypriv= (inleft res) )
+                        }
+                  
+  + { badbadnotgood mp ks mypriv }.
 Proof. case_eq (requestKey (getFrom mp) ks).  (*at this point, successful look up of pub key *)
   intros.    
     case_eq (getMessage mp).
@@ -377,8 +352,10 @@ Proof. case_eq (requestKey (getFrom mp) ks).  (*at this point, successful look u
          case_eq (hopefullyEncrypted). (* for all except encrypt form, return the error. *)
            intros.  right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity. 
            intros.   right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity.
-           (*encrypt case *) intros. case_eq (decrypt m mypriv). 
-                                        intros.  left. exact m0. 
+           (*encrypt case *) intros. case_eq (decrypt hopefullyEncrypted mypriv). 
+                                        intros.  left. exists m. exists k1. exists k0. split. reflexivity. rewrite <- H1.
+                                            assert (m0 = m).  rewrite H1 in H2.  simpl in H2. destruct (is_inverse mypriv k1).  inversion H2.  reflexivity.  inversion H2. rewrite <- H3. apply H2. 
+                                                                      
                                         intros. right. apply myKeyFails. (* this needs more descriptive args, but I'm really tired of this. *) 
            intros.    right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity. 
            intros.    right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity.
