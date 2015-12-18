@@ -278,6 +278,7 @@ Eval compute in removeKey ks3 3.
 Eval compute in removeKey ks3 4.
 
 Definition publicServerKey := public 0.
+Definition privateServerKey := private 0. 
 
 Inductive Maybe {T : Type} :=
  | Just : T -> Maybe
@@ -290,13 +291,15 @@ Theorem inImpliesIn : forall T : Type,
                       In t ls 
 *)
 SearchAbout In.
-Fixpoint findOr (name : Name) (ks : KeyServer) : PubProof + {forall kp : PubProof, ~In (name,kp) ks}. 
+Fixpoint findOr (name : Name) (ks : KeyServer) : { x :PubProof | In (name,x) ks} + {forall kp : PubProof, ~In (name,kp) ks}. 
 Proof. induction ks. right.  intros.  simpl. unfold not.  intros.  apply H. 
-destruct a.  case_eq (beq_nat name n).  intros. left.  exact s. 
-intros. SearchAbout In. destruct IHks. left. exact p. right. 
-intros. assert (~ (n,s) = (name, kp)). unfold not. intros. inversion H0. SearchAbout beq_nat. apply beq_nat_false in H.   symmetry in H2. contradiction. SearchAbout In. unfold not. intros.     symmetry in H. SearchAbout beq_nat. apply    rewrite H2 in H. SearchAbout beq_nat. apply beq_nat_refl in H.   simpl in H. 
- left   destruct findOr. 
-.  case_eq (name = (fst a)).   trivial.  
+destruct a.  case_eq (beq_nat name n).  intros. left.  exists s.  SearchAbout beq_nat. symmetry in H. apply beq_nat_eq in H. rewrite H. SearchAbout In. apply in_eq.   
+intros. SearchAbout In. destruct IHks. left. destruct s0.  exists x. simpl. right. apply i. (* destruct s0. apply s0.  simpl.   exists s. exact p. right. *)
+intros. assert (forall pp, ~ (n,s) = (name, pp)). intros.  unfold not. intros. inversion H0. SearchAbout beq_nat. apply beq_nat_false in H.   symmetry in H2. contradiction.
+SearchAbout In. unfold not. right. intros. simpl in H1.  destruct H1.  apply H0 in H1.  apply H1. apply n0 in H1.  apply H1. Defined. 
+
+
+(*
 Fixpoint findMaybe (name : Name) (ks : KeyServer) : Maybe (T := PubProof).
 Proof.  intros. remember k as p.   trivial. remember k. ( k : PubProof).
 
@@ -321,13 +324,46 @@ Proof. intros.  unfold not in H. simpl.
 Theorem  findImpliesIn : forall (name : Name), forall (ks : KeyServer), forall (s : PubProof),
 (findMaybe name ks = Just s) ->   In (name, s) ks.
 Proof.  intros. exists s.  case_eq (findMaybe name ks). intros.  induction findMaybe. 
-
+*)
 
 
 Fixpoint requestKey {T : Type} (name :Name) (ks : KeyServer) : { m : message T | 
-                                                                 exists kp, m = sign T (key T (proj1_sig kp)) publicServerKey /\
-                                                                 In (name,kp) ks } + { findMaybe name ks = Nothing}. 
-Proof. case_eq (findMaybe name ks). intros. left.  exists (sign T (key T (proj1_sig s)) publicServerKey). exists s. split. reflexivity.   right. reflexivity. Defined.  
+                                                                 exists kp, m = sign T (key T (proj1_sig kp)) privateServerKey /\
+                                                                 In (name,kp) ks } + {forall kp, ~ (In (name,kp) ks)}. 
+Proof. case_eq (findOr name ks). intros. destruct s.  left.  exists (sign T (key T (proj1_sig x)) privateServerKey). exists x. split. reflexivity. apply i. intros.    right. apply n. Defined.  
+
+
+
+Fixpoint findMaybe (name : Name) (ks : KeyServer) : Maybe :=
+  match ks with 
+   | nil => Nothing
+   | x :: xs => if beq_nat (fst x) name then Just (snd x) else findMaybe name xs
+  end.
+
+Theorem nameinServerNotEmpty : forall name : Name, forall ks : KeyServer,
+  nameinServer name ks = true -> ks <> nil. 
+Proof. intros. unfold not. intros. unfold nameinServer in H. rewrite H0 in H. inversion H. Defined.
+
+
+
+Fixpoint requestKey2 (name :Name) (ks : KeyServer) : keyType + { findMaybe name ks = Nothing}. 
+Proof. case_eq (findMaybe name ks). intros. left.  exact (proj1_sig s). right. reflexivity. Defined.  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 (*
 
@@ -356,10 +392,18 @@ Definition getMessage {T : Type} (mp : RealMessage T): message T :=
   match mp with
    | realmessage f t m => m
   end. 
+Inductive MyError : Prop :=
+  myerror : MyError.
+(*
+Definition checkServerMessage {T :Type} {ks : KeyServer} {name : Name} (mp : { m : message T |   exists kp, m = sign T (key T (proj1_sig kp)) privateServerKey /\
+                                                   In (name,kp) ks }) : keyType. case_eq mp. intros.  destruct x. inversion e.    exists kp. e. destruct e. 
+Proof. intros. 
+Definition requestKey2{T : Type} (name: Name) (ks : KeyServer) : keyType  + {forall kp, ~ (In (name,kp) ks)}.
 
-
+Proof. case_eq (requestKey ( T:=T) name ks ). intros. left.  destruct s. exact kp. elim e. destruct e. left.    simpl e. destruct e.  simpl in s.  remember (proj2_sig s).   left. destruct s. exact k.  case_eq s.  intros.  destruct s.   
+*)
 Inductive badbadnotgood {T : Type} ( mp : RealMessage T) (ks : KeyServer) (key : keyType) : Prop :=
-  | notsignedman : (exists k, requestKey (getFrom mp) ks = inleft k /\ ~ (is_signed (getMessage mp) k)) -> badbadnotgood mp ks key
+  | notsignedman : (exists k, requestKey2 (getFrom mp) ks = inleft k /\ ~ (is_signed (getMessage mp) (k))) -> badbadnotgood mp ks key
   | cantdecryptman : { m : message T | exists innerM : message T, forall k, forall mm, innerM <> encrypt T mm k /\ exists someK,                                  
                        m = sign T innerM someK} -> badbadnotgood mp ks key
   | myKeyFails : badbadnotgood mp ks key
@@ -372,7 +416,7 @@ Definition receiveMessage {T : Type} (ks : KeyServer) (mp : RealMessage T) (mypr
                         }
                   
   + { badbadnotgood mp ks mypriv }.
-Proof. case_eq (requestKey (getFrom mp) ks).  (*at this point, successful look up of pub key *)
+Proof. case_eq (requestKey2 (getFrom mp) ks).  (*at this point, successful look up of pub key *)
   intros.    
     case_eq (getMessage mp).
        intros. right.  constructor. exists k. split.  apply H.  rewrite H0. simpl. unfold not. intros.  apply H1. 
@@ -396,9 +440,9 @@ Proof. case_eq (requestKey (getFrom mp) ks).  (*at this point, successful look u
    intros. right.  apply keyLookupFail. (* needs more args again.*) Defined. 
 
 Definition engage {T: Type} (a : Name) (aPriv : keyType) (b: Name) ( bPriv : keyType) (ks : KeyServer) (m : message T) := 
-   match requestKey b ks with 
+   match requestKey2 b ks with 
      | inright _ => false
-     | inleft bPub => match receiveMessage ks (proj1_sig  (send bPub aPriv m a b) ) bPriv with
+     | inleft bPub => match receiveMessage ks (proj1_sig  (send bPriv aPriv m a b) ) bPriv with
                           | inright _ => false
                           | inleft _ => true
                       end
