@@ -409,9 +409,14 @@ Inductive badbadnotgood {T : Type} ( mp : RealMessage T) (ks : KeyServer) (key :
   | myKeyFails : badbadnotgood mp ks key
   | keyLookupFail : badbadnotgood mp ks key.
 
+Theorem inverses : forall k1 k2, inverse k1 = k2 -> inverse k2 = k1.
+Proof. intros. destruct k1.  
+  simpl in H. rewrite <- H.  simpl. reflexivity. 
+  simpl in H. rewrite <- H.  simpl. reflexivity.  
+  simpl in H.  rewrite <- H. simpl. reflexivity. Qed. 
 
 Definition receiveMessage {T : Type} (ks : KeyServer) (mp : RealMessage T) (mypriv : keyType) : 
-   {res : message T |  (exists k2 k1, (getMessage mp) = sign T (encrypt T res k2) k1 /\
+   {res : message T |  exists kpub, (requestKey2 (getFrom mp) ks) = inleft kpub /\  (exists k2, (getMessage mp) = sign T (encrypt T res k2) (inverse kpub) /\
                        decrypt (encrypt T res k2) mypriv= (inleft res) )
                         }
                   
@@ -422,21 +427,24 @@ Proof. case_eq (requestKey2 (getFrom mp) ks).  (*at this point, successful look 
        intros. right.  constructor. exists k. split.  apply H.  rewrite H0. simpl. unfold not. intros.  apply H1. 
        intros. right. constructor. exists k. split. apply H.  rewrite H0. simpl. unfold not. intros. apply H1. 
        intros. right. constructor. exists k. split. apply H.  rewrite H0. simpl. unfold not. intros. apply H1.
-       intros. rename m into hopefullyEncrypted. 
+       intros. rename m into hopefullyEncrypted.
+       case_eq (is_inverse k0 k).
+        intros.  
          (* this is the signed case *)
          case_eq (hopefullyEncrypted). (* for all except encrypt form, return the error. *)
-           intros.  right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity. 
-           intros.   right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity.
+           intros.  right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H2. split.  intros.  inversion H3. exists k0. rewrite H0. rewrite H2. reflexivity. 
+           intros.   right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H2. split.  intros.  inversion H3. exists k0. rewrite H0. rewrite H2. reflexivity.
            (*encrypt case *) intros. case_eq (decrypt hopefullyEncrypted mypriv). 
-                                        intros.  left. exists m. exists k1. exists k0. split. reflexivity. rewrite <- H1.
-                                            assert (m0 = m).  rewrite H1 in H2.  simpl in H2. destruct (is_inverse mypriv k1).  inversion H2.  reflexivity.  inversion H2. rewrite <- H3. apply H2. 
+                                        intros.  left. exists m. exists k. split. reflexivity. exists k1. split.    rewrite e.  reflexivity.
+                                            assert (m0 = m).  rewrite H2 in H3.  simpl in H3. destruct (is_inverse mypriv k1).  inversion H3.  reflexivity.  inversion H3.  rewrite <- H2. rewrite H4 in H3. apply H3. 
                                                                       
                                         intros. right. apply myKeyFails. (* this needs more descriptive args, but I'm really tired of this. *) 
-           intros.    right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity. 
-           intros.    right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity.
-           intros.    right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H1. split.  intros.  inversion H2. exists k0. rewrite <- H1. rewrite H0. reflexivity.
-       intros. right. constructor. exists k. split. apply H.  rewrite H0. simpl. unfold not. intros. apply H1.
-       intros. right. constructor. exists k. split. apply H.  rewrite H0. simpl. unfold not. intros. apply H1.
+           intros.    right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H2. split.  intros.  inversion H3. exists k0. rewrite H0. rewrite H2. reflexivity. 
+           intros.    right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H2. split.  intros.  inversion H3. exists k0. rewrite H0. rewrite H2. reflexivity. 
+           intros.    right.  apply cantdecryptman. exists  (getMessage mp). exists hopefullyEncrypted. intros. unfold not. rewrite H2. split.  intros.  inversion H3. exists k0. rewrite H0. rewrite H2. reflexivity. 
+           intros. right. constructor. exists k. split. apply H.  rewrite H0. simpl. unfold not. intros. unfold not in n.  symmetry in H2. apply inverses in H2. symmetry in H2.   apply n in H2. apply H2.
+intros. right. constructor. exists k. split. apply H.  rewrite H0. simpl. unfold not. intros. apply H1.
+intros. right. constructor. exists k. split. apply H.  rewrite H0. simpl. unfold not. intros. apply H1.
    intros. right.  apply keyLookupFail. (* needs more args again.*) Defined. 
 
 Definition engage {T: Type} (a : Name) (aPriv : keyType) (b: Name) ( bPriv : keyType) (ks : KeyServer) (m : message T) := 
@@ -452,20 +460,6 @@ Definition engage {T: Type} (a : Name) (aPriv : keyType) (b: Name) ( bPriv : key
 Theorem Any message leaving a sending node is encrypted and signedsendTheorem     -- this is proven in the return type of send. 
 )*)
 
-Theorem receiveTheorem : forall T : Type,
-                         forall ks : KeyServer,
-                         forall mp : RealMessage T,                         
-                         forall k1 : keyType,
-                         exists m1 : message T, receiveMessage ks mp k1 = inleft m1 -> exists m : message T,
-                                                                exists k1 : keyType, exists k2 : keyType,    m1 = sign T (encrypt T m k1) k2 .
-Proof.  intros. case_eq (getMessage mp). 
-intros. exists (getMessage mp). rewrite H.  simpl. intros. compute in H0.    fold requestKey.  simpl. 
- case_eq (receiveMessage ks mp k1). 
-   intros. exists m.  intros. case_eq m. 
-intros.  unfold receiveMessage in H. fold H. 
-                         
-                         forall mp : RealMessage T,
-                         forall mypriv : 
 
 
 
